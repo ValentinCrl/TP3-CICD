@@ -1,0 +1,82 @@
+name: Terraform CI/CD
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+
+env:
+  OVH_ENDPOINT: ovh-eu
+  OVH_APPLICATION_KEY: ${{ secrets.OVH_APPLICATION_KEY }}
+  OVH_APPLICATION_SECRET: ${{ secrets.OVH_APPLICATION_SECRET }}
+  OVH_CONSUMER_KEY: ${{ secrets.OVH_CONSUMER_KEY }}
+  TF_VAR_ovh_project_id: ${{ secrets.TF_VAR_ovh_project_id }}
+
+jobs:
+  # ─── JOB 1 : Validation et sécurité ────────────────────────────────
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Setup tflint
+        uses: terraform-linters/setup-tflint@v4
+      - name: Run tflint
+        run: |
+          tflint --init
+          tflint
+
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.3
+        with:
+          soft_fail: false   # Bloque le pipeline si faille détectée
+
+  # ─── JOB 2 : Plan (dépend de validate) ──────────────────────────────
+  plan:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -no-color
+
+  # ─── JOB 3 : Apply (uniquement sur push vers main) ──────────────────
+  apply:
+    needs: plan
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: production   # Nécessite une approbation (voir étape D)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
