@@ -1,0 +1,4 @@
+./**.tf
+output.tf
+variables.tf
+terraform.tfvars
