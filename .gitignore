@@ -1,3 +1,2 @@
 ./**.tf
-output.tf
 terraform.tfvars
